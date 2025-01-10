@@ -1,16 +1,22 @@
+# Компилятор и флаги
 CC = gcc
 CFLAGS = -Wall -Wextra -g -Iinclude
+TARGETS = bin/server bin/client
 
-TARGETS = server client
-
+# Цели по умолчанию
 all: $(TARGETS)
 
-server: src/server.c
-	$(CC) $(CFLAGS) -o server src/server.c
+# Компиляция сервера
+bin/server: src/server.c include/common.h
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o bin/server src/server.c
 
-client: src/client.c
-	$(CC) $(CFLAGS) -o client src/client.c
+# Компиляция клиента
+bin/client: src/client.c include/common.h
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o bin/client src/client.c
 
+# Удаление скомпилированных файлов
 clean:
-	rm -f $(TARGETS)
+	rm -rf bin
 
