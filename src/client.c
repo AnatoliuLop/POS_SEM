@@ -5,89 +5,119 @@
 #include <sys/shm.h>
 #include "../include/common.h"
 
-// Поток обработки ввода от пользователя
+// Поток для обработки пользовательского ввода (W, A, S, D)
 void *handle_input(void *arg) {
     GameState *game = (GameState *)arg;
-    int player_id = game->ready_players - 1;
+
+    // Узнаём, какой у нас индекс игрока
+    // (game->ready_players-1) мы выставили при подключении
+    int player_id;
+    pthread_mutex_lock(&game_mutex);
+    player_id = game->ready_players - 1;
+    pthread_mutex_unlock(&game_mutex);
 
     while (!game->game_over) {
         char input = getchar();
+
+        // Если введена одна из W, A, S, D
         if (input == 'w' || input == 'a' || input == 's' || input == 'd') {
-            printf("[CLIENT] Preparing to send: Player %d pressed %c\n", player_id, input);
             pthread_mutex_lock(&game_mutex);
             game->players[player_id].direction = input;
             pthread_mutex_unlock(&game_mutex);
 
-            // Логирование отправки
-            printf("Sent to server: Player %d pressed %c\n", player_id + 1, input);
+            printf("[CLIENT] Sent to server: Player %d pressed %c\n", 
+                    player_id + 1, input);
         }
-      usleep(50000); // Короткая задержка, чтобы не загружать процессор
+        usleep(50000); // небольшая задержка
     }
 
     return NULL;
 }
 
-
-// Поток обработки отображения игрового поля
+// Поток отображения игрового поля
 void *handle_display(void *arg) {
     GameState *game = (GameState *)arg;
+
+    // Узнаём свой индекс (как выше)
+    int player_id;
+    pthread_mutex_lock(&game_mutex);
+    player_id = game->ready_players - 1;
+    pthread_mutex_unlock(&game_mutex);
 
     while (!game->game_over) {
         pthread_mutex_lock(&game_mutex);
 
-        // Проверяем, подключились ли все игроки
+        // Если ещё не все подключились:
         if (game->ready_players < game->player_count) {
-            printf("Waiting for other players to connect...\n");
+            // Можно вывести более конкретное сообщение,
+            // если выбрано 2 игрока, а подключен 1
+            if (game->player_count == 2 && game->ready_players == 1) {
+                printf("Waiting for the second player...\n");
+            } else {
+                // Если вдруг логика изменится на 3-4 игроков
+                printf("Waiting for other players to connect...\n");
+            }
             pthread_mutex_unlock(&game_mutex);
-            usleep(500000); // Полсекунды ожидания
+            usleep(500000);
             continue;
         }
 
-        // Проверяем, если сервер завершил игру
+        // Если сервер остановлен (например, нажали p)
         if (!game->server_running) {
             printf("SERVER STOPPED THE GAME!\n");
             pthread_mutex_unlock(&game_mutex);
             exit(0);
         }
 
-        // Отображаем игровое поле
-        // system("clear");
+        // Отрисовываем поле (минимально)
+        // system("clear"); // Если хотите очищать экран
         for (int y = 0; y < GRID_SIZE; y++) {
             for (int x = 0; x < GRID_SIZE; x++) {
-                if (game->grid[y][x] == 0) printf(".");
-                else if (game->grid[y][x] == 1) printf("O");
-                else if (game->grid[y][x] == 2) printf("G");
-                else if (game->grid[y][x] == 3) printf("F");
+                int val = game->grid[y][x];
+                if (val == 0) {
+                    printf(".");
+                } else if (val == 1) {
+                    printf("O"); // Первый игрок
+                } else if (val == 2) {
+                    printf("G"); // Второй игрок
+                } else if (val == 3) {
+                    printf("F"); // Фрукт
+                }
             }
             printf("\n");
         }
-        printf("Your score: %d\n", game->players[game->ready_players - 1].score);
+        // Выводим очки
+        printf("Your score: %d (Player %d)\n", 
+                game->players[player_id].score, player_id+1);
 
         pthread_mutex_unlock(&game_mutex);
-        usleep(100000); // Задержка для плавности отображения
+
+        // Небольшая задержка
+        usleep(200000);
     }
 
     return NULL;
 }
 
 int main() {
-    // Подключение к разделяемой памяти
-printf("Trying to connect to shared memory...\n");
+    printf("Trying to connect to shared memory...\n");
 
-int shmid = shmget(SHARED_MEMORY_KEY, sizeof(GameState), 0666);
-if (shmid < 0) {
-    perror("shmget");
-    exit(1);
-}
+    // Пытаемся получить доступ к разделяемой памяти
+    int shmid = shmget(SHARED_MEMORY_KEY, sizeof(GameState), 0666);
+    if (shmid < 0) {
+        perror("shmget");
+        exit(1);
+    }
+    printf("Connected to shared memory. SHMID: %d\n", shmid);
 
-printf("Connected to shared memory. SHMID: %d\n", shmid);
+    // Присоединяемся
     GameState *game = (GameState *)shmat(shmid, NULL, 0);
     if (game == (GameState *)-1) {
         perror("shmat");
         exit(1);
     }
 
-    // Проверка, можно ли подключиться
+    // Проверяем, есть ли ещё «место» для нас
     pthread_mutex_lock(&game_mutex);
     if (game->ready_players >= game->player_count) {
         printf("Error: Game is already full!\n");
@@ -95,27 +125,30 @@ printf("Connected to shared memory. SHMID: %d\n", shmid);
         shmdt((void *)game);
         exit(1);
     }
+    // Увеличиваем счётчик подключившихся
     game->ready_players++;
+    // Наш ID = (ready_players - 1)
+    int player_id = game->ready_players - 1;
     pthread_mutex_unlock(&game_mutex);
 
-    printf("Client started...\n");
-    printf("Player %d connected and ready!\n", game->ready_players - 1);
-    printf("\n");
-    printf("\n");
-    printf("\n");
-    // Создание потоков для ввода и отображения
-      enable_nonblocking_input();
+    printf("Client started. You are Player %d!\n", player_id+1);
 
-    pthread_t input_thread, display_thread;
-    pthread_create(&input_thread, NULL, handle_input, (void *)game);
-    pthread_create(&display_thread, NULL, handle_display, (void *)game);
+    // Включаем неблокирующий ввод
+    enable_nonblocking_input();
 
-    pthread_join(input_thread, NULL);
-    pthread_join(display_thread, NULL);
+    // Создаём потоки для чтения ввода и отображения
+    pthread_t input_thr, display_thr;
+    pthread_create(&input_thr, NULL, handle_input, (void *)game);
+    pthread_create(&display_thr, NULL, handle_display, (void *)game);
 
-     disable_nonblocking_input(); // Отключение неблокирующего ввода
+    // Ждём завершения
+    pthread_join(input_thr, NULL);
+    pthread_join(display_thr, NULL);
 
-    // Отсоединение от разделяемой памяти
+    // Выключаем неблокирующий ввод
+    disable_nonblocking_input();
+
+    // Отключаемся от памяти
     shmdt((void *)game);
 
     return 0;
