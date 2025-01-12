@@ -28,6 +28,7 @@ typedef struct {
     int game_over;                     // Флаг окончания игры
     int player_count;                  // Количество игроков
     int ready_players;                 // Сколько игроков готово
+    int server_running;                //WORK SERVER
 } GameState;
 
 extern pthread_mutex_t game_mutex; // Объявление мьютекса

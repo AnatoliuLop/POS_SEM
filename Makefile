@@ -6,7 +6,7 @@ all: $(TARGETS)
 
 bin/server: src/server.c src/common.c include/common.h
 	mkdir -p bin
-	$(CC) $(CFLAGS) -o bin/server src/server.c src/common.c
+	$(CC) $(CFLAGS) -o bin/server src/server.c src/common.c -lpthread
 
 bin/client: src/client.c src/common.c include/common.h
 	mkdir -p bin

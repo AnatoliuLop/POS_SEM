@@ -4,10 +4,10 @@
 #include <pthread.h>
 #include "../include/common.h"
 
-// Статические переменные для хранения настроек терминала
+// Статические переменные для хранения настроек терминалa 
+pthread_mutex_t game_mutex = PTHREAD_MUTEX_INITIALIZER; // Инициализация мьютекса
 static struct termios oldt, newt;
 
-pthread_mutex_t game_mutex = PTHREAD_MUTEX_INITIALIZER; // Инициализация мьютекса
 
 
 // Включение неблокирующего ввода
@@ -22,7 +22,6 @@ void enable_nonblocking_input() {
     // Применяем новые настройки
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 }
-
 // Отключение неблокирующего ввода
 void disable_nonblocking_input() {
     // Восстанавливаем старые настройки терминала
