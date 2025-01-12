@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/shm.h>
-#include <sys/types.h>
-#include <signal.h>
 #include "../include/common.h"
 #include "../include/server_api.h"
 

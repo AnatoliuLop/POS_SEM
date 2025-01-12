@@ -40,7 +40,7 @@ $(SRCDIR)/server_ipc.o: $(SRCDIR)/server_ipc.c include/common.h include/server_a
 $(SRCDIR)/client_main.o: $(SRCDIR)/client_main.c include/common.h include/client_api.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $(SRCDIR)/client_main.c -o $(SRCDIR)/client_main.o
 
-$(SRCDIR)/client_game.o: $(SRCDIR)/client_game.c include/common.h include/client_api.h
+$(SRCDIR)/client_game.o: $(SRCDIR)/client_game.c include/common.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $(SRCDIR)/client_game.c -o $(SRCDIR)/client_game.o
 
 clean:

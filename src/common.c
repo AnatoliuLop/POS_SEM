@@ -4,8 +4,10 @@
 #include <time.h>
 #include "../include/common.h"
 
+// Globálny mutex
 pthread_mutex_t game_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Pre neblokujúci vstup
 static struct termios oldt, newt;
 
 void enable_nonblocking_input() {

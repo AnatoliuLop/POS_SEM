@@ -3,12 +3,11 @@
 
 #include "common.h"
 
-// Функции для клиента
-void *client_input_thread(void *arg);
-void *client_display_thread(void *arg);
-void run_client_game(int client_id); 
-// CHANGED: теперь run_client_game принимает некий client_id, 
-// чтобы можно было «вернуться» к своей змее
+// Spustenie hlavného menu klienta
+void run_client_menu();
+
+// Funkcia na pripojenie sa k hre (definovaná v client_game.c)
+void join_game(int client_id);
 
 #endif
 
