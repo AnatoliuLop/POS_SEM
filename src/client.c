@@ -1,33 +1,48 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/ipc.h>
+#include <pthread.h>
 #include <sys/shm.h>
-#include <termios.h>
-#include <fcntl.h>
 #include "../include/common.h"
 
-// Включение неблокирующего ввода
-void enable_nonblocking_input() {
-    struct termios t;
-    tcgetattr(STDIN_FILENO, &t);
-    t.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &t);
-    fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);
+void *handle_input(void *arg) {
+    GameState *game = (GameState *)arg;
+    int player_id = game->ready_players - 1;
+
+    while (!game->game_over) {
+        char input = getchar();
+        if (input == 'w' || input == 'a' || input == 's' || input == 'd') {
+            pthread_mutex_lock(&game_mutex);
+            game->players[player_id].direction = input;
+            pthread_mutex_unlock(&game_mutex);
+        }
+    }
+
+    return NULL;
 }
 
-// Отключение неблокирующего ввода
-void disable_nonblocking_input() {
-    struct termios t;
-    tcgetattr(STDIN_FILENO, &t);
-    t.c_lflag |= ICANON | ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &t);
+void *handle_display(void *arg) {
+    GameState *game = (GameState *)arg;
+
+    while (!game->game_over) {
+        system("clear");
+        for (int y = 0; y < GRID_SIZE; y++) {
+            for (int x = 0; x < GRID_SIZE; x++) {
+                if (game->grid[y][x] == 0) printf(".");
+                else if (game->grid[y][x] == 1) printf("O");
+                else if (game->grid[y][x] == 2) printf("G");
+                else if (game->grid[y][x] == 3) printf("F");
+            }
+            printf("\n");
+        }
+        printf("Your score: %d\n", game->players[game->ready_players - 1].score);
+        usleep(100000);
+    }
+
+    return NULL;
 }
 
 int main() {
-    printf("Client started...\n");
-
-    // Подключение к общей памяти
     int shmid = shmget(SHARED_MEMORY_KEY, sizeof(GameState), 0666);
     if (shmid < 0) {
         perror("shmget");
@@ -40,46 +55,19 @@ int main() {
         exit(1);
     }
 
-    // Определение ID игрока
-    int player_id = -1;
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (!game->players[i].active) {
-            player_id = i;
-            break;
-        }
-    }
+    pthread_mutex_lock(&game_mutex);
+    game->ready_players++;
+    pthread_mutex_unlock(&game_mutex);
 
-    if (player_id == -1) {
-        printf("No available player slots. Exiting.\n");
-        shmdt((void *)game);
-        exit(1);
-    }
+    pthread_t input_thread, display_thread;
+    pthread_create(&input_thread, NULL, handle_input, (void *)game);
+    pthread_create(&display_thread, NULL, handle_display, (void *)game);
 
-    // Установка флага активности игрока и увеличения ready_players
-    game->players[player_id].active = 1;
-    __sync_fetch_and_add(&game->ready_players, 1); // Атомарное увеличение ready_players
-    printf("Player %d connected and ready!\n", player_id);
+    pthread_join(input_thread, NULL);
+    pthread_join(display_thread, NULL);
 
-    enable_nonblocking_input(); // Включаем неблокирующий ввод
+    shmdt((void *)game);
 
-    while (!game->game_over) {
-        char command = getchar();
-        if ((command == 'w' && game->players[player_id].direction != 's') || // Запрет движения вниз
-            (command == 's' && game->players[player_id].direction != 'w') || // Запрет движения вверх
-            (command == 'a' && game->players[player_id].direction != 'd') || // Запрет движения вправо
-            (command == 'd' && game->players[player_id].direction != 'a')) { // Запрет движения влево
-            game->players[player_id].direction = command; // Меняем направление
-        } else if (command == 'q') {
-            break; // Выход из игры
-        }
-        usleep(200000); // Задержка для плавности
-    }
-
-    printf("Game over! Your final score: %d\n", game->players[player_id].score);
-
-    disable_nonblocking_input(); // Отключаем неблокирующий ввод
-    shmdt((void *)game);         // Отключение от общей памяти
-    printf("Client stopped.\n");
     return 0;
 }
 
